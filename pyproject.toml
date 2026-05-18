@@ -1,0 +1,17 @@
+[project]
+name = "fanzadl"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "requests>=2.34.2",
+]
+
+
+[project.scripts]
+fanzadl = "fanzadl.main:function_name"
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = ["D", "PLR2004", "COM812"]
