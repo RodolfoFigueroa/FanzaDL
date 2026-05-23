@@ -12,6 +12,7 @@ from fanzadl.models.video import (
     VideoLibraryItemContentsModel,
     VRLibraryItemContentsModel,
 )
+from fanzadl.models.video.base import _BaseLibraryItemContentsModel
 
 logger = logging.getLogger(__name__)
 
@@ -88,15 +89,36 @@ class FanzaDLManager:
 
             library_parsed = LibraryDataModel(**library_data)
 
-            context = {
+            base_context = {
                 "authorization": lambda: self.authorization,
                 "exploit_id": lambda: self.exploit_id,
                 "mylibrary_id": None,
+                "shop_name": None,
             }
             for elem in library_parsed.list_:
-                context["mylibrary_id"] = elem.contents["mylibrary_id"]
+                context = {
+                    **base_context,
+                    "mylibrary_id": elem.contents["mylibrary_id"],
+                    "shop_name": elem.contents["shop_name"],
+                    "product_id": elem.contents["product_id"],
+                }
 
                 if elem.contents["content_type"] == "video":
+                    # Create a temporary _BaseLibraryItemContentsModel to
+                    # extract the details field
+                    _temp_contents = elem.contents.copy()
+                    del _temp_contents["content_type"]
+                    _base_model = _BaseLibraryItemContentsModel.model_validate(
+                        _temp_contents,
+                        context=context,
+                    )
+
+                    # Inject the delivery_content_info into the contents for
+                    # the final model validation
+                    elem.contents["video_list"] = _base_model.details[
+                        "delivery_content_info"
+                    ]
+
                     model = VideoLibraryItemContentsModel.model_validate(
                         elem.contents,
                         context=context,

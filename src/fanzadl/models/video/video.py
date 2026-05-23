@@ -1,13 +1,17 @@
-from functools import cached_property
 from typing import Literal
 
-from pydantic import ConfigDict, ValidationError, computed_field
+from pydantic import (
+    ConfigDict,
+    Field,
+)
 
 from fanzadl.constants import USER_AGENT
 from fanzadl.functions import hash_signature
 from fanzadl.models.video.base import (
+    _BaseDeliveryInfoModel,
     _BaseLibraryItemContentsModel,
     _BaseQualityModel,
+    _BaseRatePatternModel,
 )
 
 
@@ -20,7 +24,7 @@ class VideoQualityModel(_BaseQualityModel):
     height: int
     parts: int
     product_id: str
-    quality: int
+    quality: int | str
     quality_display_name_en: str
     quality_short_display_name: str
     recommended_viewing_type: str | None
@@ -39,44 +43,36 @@ class VideoQualityModel(_BaseQualityModel):
         )
 
 
+class VideoDeliveryInfoModel(_BaseDeliveryInfoModel):
+    download: list[VideoQualityModel] = []  # noqa: RUF012
+    stream: list[VideoQualityModel] = []  # noqa: RUF012
+
+
+class VideoRatePatternModel(_BaseRatePatternModel):
+    amazonfire: VideoDeliveryInfoModel
+    amazonfire_4k: VideoDeliveryInfoModel
+    amazonfirestick: VideoDeliveryInfoModel
+    android: VideoDeliveryInfoModel
+    androidtv: VideoDeliveryInfoModel
+    appletv: VideoDeliveryInfoModel
+    aquos: VideoDeliveryInfoModel
+    bravia: VideoDeliveryInfoModel
+    chromecast: VideoDeliveryInfoModel
+    chromecast_4k: VideoDeliveryInfoModel
+    chromecast_hd: VideoDeliveryInfoModel
+    html5tv: VideoDeliveryInfoModel
+    html5tv_4k: VideoDeliveryInfoModel
+    iphone: VideoDeliveryInfoModel
+    pc: VideoDeliveryInfoModel
+    ps4: VideoDeliveryInfoModel
+    ps4_pro: VideoDeliveryInfoModel
+    ps5: VideoDeliveryInfoModel
+    regza: VideoDeliveryInfoModel
+    viera: VideoDeliveryInfoModel
+    vita_tv: VideoDeliveryInfoModel = Field(alias="vita-tv")
+    vita: VideoDeliveryInfoModel
+
+
 class VideoLibraryItemContentsModel(_BaseLibraryItemContentsModel):
     content_type: Literal["video"]
-
-    @computed_field
-    @cached_property
-    def device_groups(self) -> list[VideoQualityModel]:
-        detail = self.get_detail()
-
-        out: list[VideoQualityModel] = []
-        for delivery in detail["delivery_content_info"].values():
-            for method_data in delivery.values():
-                for device_group in method_data:
-                    try:
-                        elem = VideoQualityModel.model_validate(device_group)
-                        elem._get_authorization = self._get_authorization  # noqa: SLF001
-                        elem._get_exploit_id = self._get_exploit_id  # noqa: SLF001
-                        elem._mylibrary_id = self.mylibrary_id  # noqa: SLF001
-                        out.append(elem)
-                    except ValidationError:
-                        continue
-
-        # Put part count validation here so it's done lazily
-        part_counts = {quality.parts for quality in out}
-        if len(part_counts) == 0:
-            err = "No quality information available to determine part count"
-            raise ValueError(err)
-
-        if len(part_counts) > 1:
-            err = f"Inconsistent part counts across qualities: {part_counts}"
-            raise ValueError(err)
-
-        return sorted(set(out), key=lambda x: x.quality_order)
-
-    @computed_field
-    @property
-    def parts(self) -> int:
-        return self.device_groups[0].parts
-
-    @property
-    def download_highest(self) -> VideoQualityModel:
-        return self.device_groups[-1]
+    video_list: VideoRatePatternModel
