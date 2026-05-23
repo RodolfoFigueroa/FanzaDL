@@ -1,7 +1,6 @@
 import logging
 
 import requests
-from pydantic import ValidationError
 
 from fanzadl.exceptions import AuthExpiredError
 from fanzadl.functions import auth_with_login, request, request_with_token
@@ -23,16 +22,17 @@ class FanzaDLManager:
         self.password = password
         self.request_timeout = request_timeout
 
-        self.video_library: dict[str, VideoLibraryItemContentsModel] = {}
-        self.vr_library: dict[str, VRLibraryItemContentsModel] = {}
-        self.update_library()
-
         user_data, token_data = auth_with_login(
             email, password, timeout=self.request_timeout
         )
+
         self.user_id = user_data.user_id
         self.refresh_token = token_data.body.refresh_token
         self.access_token = token_data.body.access_token
+
+        self.video_library: dict[str, VideoLibraryItemContentsModel] = {}
+        self.vr_library: dict[str, VRLibraryItemContentsModel] = {}
+        self.update_library()
 
     @property
     def exploit_id(self) -> str:
@@ -96,18 +96,21 @@ class FanzaDLManager:
             for elem in library_parsed.list_:
                 context["mylibrary_id"] = elem.contents["mylibrary_id"]
 
-                try:
+                if elem.contents["content_type"] == "video":
                     model = VideoLibraryItemContentsModel.model_validate(
                         elem.contents,
                         context=context,
                     )
                     self.video_library[elem.contents["mylibrary_id"]] = model
-                except ValidationError:
+                elif elem.contents["content_type"] == "vr":
                     model = VRLibraryItemContentsModel.model_validate(
                         elem.contents,
                         context=context,
                     )
                     self.vr_library[elem.contents["mylibrary_id"]] = model
+                else:
+                    err = f"Unknown content type: {elem.contents['content_type']}"
+                    raise ValueError(err)
 
             if (
                 len(self.video_library) + len(self.vr_library)

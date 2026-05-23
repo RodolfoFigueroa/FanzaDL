@@ -1,7 +1,7 @@
 import contextlib
 from typing import Literal
 
-from pydantic import field_validator
+from pydantic import computed_field, field_validator, model_validator
 
 from fanzadl.constants import USER_AGENT
 from fanzadl.functions import hash_signature
@@ -35,19 +35,8 @@ class VRQualityModel(_BaseQualityModel):
 
 
 class VRDeliveryInfoModel(_AuthAwareModel, _LibraryIDAwareModel):
-    download: list[VRQualityModel] | None = None
-    stream: list[VRQualityModel]
-
-    @property
-    def download_highest(self) -> VRQualityModel:
-        if self.download is None:
-            err = "No download quality available"
-            raise ValueError(err)
-        return self.download[-1]
-
-    @property
-    def stream_highest(self) -> VRQualityModel:
-        return self.stream[-1]
+    download: list[VRQualityModel] = []
+    stream: list[VRQualityModel] = []
 
     @field_validator("download", "stream")
     @classmethod
@@ -57,6 +46,52 @@ class VRDeliveryInfoModel(_AuthAwareModel, _LibraryIDAwareModel):
         if v is None:
             return v
         return sorted(v, key=lambda x: x.quality_order, reverse=False)
+
+    @model_validator(mode="after")
+    def enforce_part_count(self) -> "VRDeliveryInfoModel":
+        part_counts = {
+            quality.part
+            for delivery_method in (self.download, self.stream)
+            for quality in delivery_method
+        }
+
+        if len(part_counts) == 0:
+            err = "No quality information available to determine part count"
+            raise ValueError(err)
+
+        if len(part_counts) > 1:
+            err = f"Inconsistent part counts: {part_counts}"
+            raise ValueError(err)
+
+        return self
+
+    @computed_field
+    @property
+    def parts(self) -> int:
+        part_count: int | None = None
+        for delivery_method in (self.download, self.stream):
+            if len(delivery_method) > 0:
+                part_count = delivery_method[0].part
+                break
+
+        if part_count is None:
+            err = "No quality information available to determine part count."
+            raise ValueError(err)
+
+        return part_count
+
+    @computed_field
+    @property
+    def download_highest(self) -> VRQualityModel:
+        if len(self.download) == 0:
+            err = "No download quality available"
+            raise ValueError(err)
+        return self.download[-1]
+
+    @computed_field
+    @property
+    def stream_highest(self) -> VRQualityModel:
+        return self.stream[-1]
 
 
 class VRRatePatternModel(_AuthAwareModel, _LibraryIDAwareModel):
@@ -76,6 +111,20 @@ class VRRatePatternModel(_AuthAwareModel, _LibraryIDAwareModel):
     windowsmr_vr: VRDeliveryInfoModel
     xperia_vr: VRDeliveryInfoModel
 
+    @model_validator(mode="after")
+    def enforce_part_count(self) -> "VRRatePatternModel":
+        part_counts = {rate_pattern.parts for _, rate_pattern in self}
+        if len(part_counts) > 1:
+            err = f"Inconsistent part counts across delivery methods: {part_counts}"
+            raise ValueError(err)
+
+        return self
+
+    @computed_field
+    @property
+    def parts(self) -> int:
+        return self.pc_vr.parts
+
 
 class VRLibraryItemContentsModel(_BaseLibraryItemContentsModel):
     content_type: Literal["vr"]
@@ -88,3 +137,8 @@ class VRLibraryItemContentsModel(_BaseLibraryItemContentsModel):
             with contextlib.suppress(ValueError):
                 dl_list.append(model.download_highest)
         return max(dl_list, key=lambda x: x.quality_order)
+
+    @computed_field
+    @property
+    def parts(self) -> int:
+        return self.vr_rate_pattern.parts

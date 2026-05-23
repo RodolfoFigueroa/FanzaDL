@@ -60,7 +60,22 @@ class VideoLibraryItemContentsModel(_BaseLibraryItemContentsModel):
                     except ValidationError:
                         continue
 
+        # Put part count validation here so it's done lazily
+        part_counts = {quality.parts for quality in out}
+        if len(part_counts) == 0:
+            err = "No quality information available to determine part count"
+            raise ValueError(err)
+
+        if len(part_counts) > 1:
+            err = f"Inconsistent part counts across qualities: {part_counts}"
+            raise ValueError(err)
+
         return sorted(set(out), key=lambda x: x.quality_order)
+
+    @computed_field
+    @property
+    def parts(self) -> int:
+        return self.device_groups[0].parts
 
     @property
     def download_highest(self) -> VideoQualityModel:
