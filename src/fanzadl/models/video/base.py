@@ -146,6 +146,12 @@ class _BaseQualityModel(_AuthAwareModel, _LibraryPropertiesAwareModel, ABC):
         cookie_info = response.cookie_info
         return f"{content_info.redirect}&{cookie_info.name}={urllib.parse.quote(str(cookie_info.value))}&smartphone_access=1"
 
+    def get_all_urls(self) -> list[str]:
+        if self.parts == 0:
+            return [self.get_url(part=0)]
+
+        return [self.get_url(part=i) for i in range(1, self.parts + 1)]
+
 
 class _BaseDeliveryInfoModel(_AuthAwareModel, _LibraryPropertiesAwareModel):
     download: list[_BaseQualityModel] = []  # noqa: RUF012
