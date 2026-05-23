@@ -11,13 +11,11 @@ dependencies = ["pydantic>=2.13.4", "requests>=2.34.2"]
 package = true
 
 [project.scripts]
-fanzadl = "fanzadl.main:function_name"
+fanzadl = "fanzadl.main:main"
 
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = ["D", "PLR2004", "COM812", "PLR0913"]
 
 [dependency-groups]
-dev = [
-    "ipykernel<7",
-]
+dev = ["ipykernel<7"]
