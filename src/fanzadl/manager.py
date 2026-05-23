@@ -31,8 +31,9 @@ class FanzaDLManager:
         self.refresh_token = token_data.body.refresh_token
         self.access_token = token_data.body.access_token
 
-        self.video_library: dict[int, VideoLibraryItemContentsModel] = {}
-        self.vr_library: dict[int, VRLibraryItemContentsModel] = {}
+        self.library: dict[
+            int, VideoLibraryItemContentsModel | VRLibraryItemContentsModel
+        ] = {}
         self.update_library()
 
     @property
@@ -123,20 +124,17 @@ class FanzaDLManager:
                         elem.contents,
                         context=context,
                     )
-                    self.video_library[int(elem.contents["mylibrary_id"])] = model
                 elif elem.contents["content_type"] == "vr":
                     model = VRLibraryItemContentsModel.model_validate(
                         elem.contents,
                         context=context,
                     )
-                    self.vr_library[int(elem.contents["mylibrary_id"])] = model
                 else:
                     err = f"Unknown content type: {elem.contents['content_type']}"
                     raise ValueError(err)
 
-            if (
-                len(self.video_library) + len(self.vr_library)
-                >= library_parsed.content_total
-            ):
+                self.library[int(elem.contents["mylibrary_id"])] = model
+
+            if len(self.library) >= library_parsed.content_total:
                 break
             page += 1
