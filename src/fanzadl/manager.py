@@ -22,9 +22,10 @@ class FanzaDLManager:
         self.email = email
         self.password = password
         self.request_timeout = request_timeout
-        self.video_library: dict[str, VideoLibraryItemContentsModel] = {}
 
+        self.video_library: dict[str, VideoLibraryItemContentsModel] = {}
         self.vr_library: dict[str, VRLibraryItemContentsModel] = {}
+        self.update_library()
 
         user_data, token_data = auth_with_login(
             email, password, timeout=self.request_timeout
