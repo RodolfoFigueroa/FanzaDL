@@ -1,6 +1,12 @@
 import argparse
 
-from fanzadl.functions import get_library, parse_ranges, request
+from fanzadl.functions import (
+    get_library,
+    get_library_mappings,
+    parse_ranges,
+    request,
+    request_video,
+)
 
 CSV_HEADER = "content,part,url"
 
@@ -43,7 +49,6 @@ if __name__ == "__main__":
         )
     )
 
-    # region URL retrieval
     if args.output:
         with open(args.output, "w") as f:
             f.write((CSV_HEADER + "\n") if args.csv else "")
@@ -51,13 +56,18 @@ if __name__ == "__main__":
         print(CSV_HEADER)
 
     library = get_library()
+    print(f"Found {len(library)} items in the library.")
+
+    mappings = get_library_mappings(library)
 
     for choice in parse_ranges(choices, mappings):
         item = library[choice - 1]
 
         item_detail = request(
-            "Digital_Api_Mylibrary.getDetail",
-            {
+            endpoint="Digital_Api_Mylibrary.getDetail",
+            exploit_id=exploit_id,
+            access_token=access_token,
+            request_data={
                 "mylibrary_id": item.get("mylibrary_id"),
                 "product_id": item.get("product_id"),
                 "shop_name": item.get("shop_name"),
@@ -108,10 +118,11 @@ if __name__ == "__main__":
             """
 
             url_data = request_video(
-                is_vr,
-                item.get("mylibrary_id"),
-                part + 1,
-                bitrate_data.get("quality_group"),
+                is_vr=is_vr,
+                library_id=item.get("mylibrary_id"),
+                part=part + 1,
+                exploit_id=EXPLOIT_ID,
+                quality=bitrate_data.get("quality_group"),
             )
             url = url_data.get("content_info").get("redirect")
             final_url = f"{url}&{url_data.get('cookie_info').get('name')}={urllib.parse.quote(str(url_data.get('cookie_info').get('value')))}&smartphone_access=1"

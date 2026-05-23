@@ -1,7 +1,5 @@
-REQUEST_TIMEOUT = 120
 USER_AGENT = "DMMPLAY movie_player_plus (183, 5.2.10) API Level:34 PORTALAPP Android"
 REFRESH_TOKEN_PATH = "refresh_token.txt"  # noqa: S105
-USER_ID_PATH = "user_id.txt"
 
 BASE_AUTH = "https://gw.dmmapis.com"
 BASE_API = "https://www.dmm.com"

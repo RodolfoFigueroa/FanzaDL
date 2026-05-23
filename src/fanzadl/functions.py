@@ -1,23 +1,35 @@
+import base64
+import hashlib
 import hmac
 import json
 import logging
 from collections.abc import Iterator
-from typing import Literal
 
 import requests
 
-from fanzadl.constants import PROFILES, USER_AGENT
+from fanzadl.constants import (
+    BASE_API,
+    BASE_AUTH,
+    CLIENT_ID,
+    CLIENT_SECRET,
+    PROFILES,
+    SECRET_KEY,
+    USER_AGENT,
+)
+from fanzadl.exceptions import RequestError
+from fanzadl.models.access import AccessTokenDataModel
+from fanzadl.models.user import UserDataModel
 
 logger = logging.getLogger(__name__)
 
 
-def parse_ranges(ranges: str, mappings: dict) -> Iterator[int]:
-    if ranges == "*":
+def parse_ranges(ranges_str: str, mappings: dict) -> Iterator[int]:
+    if ranges_str == "*":
         for i in range(len(mappings)):
             yield i + 1
         return
 
-    ranges = ranges.split(",")
+    ranges = ranges_str.split(",")
 
     def to_number(x: str):
         if x.isnumeric():
@@ -25,87 +37,130 @@ def parse_ranges(ranges: str, mappings: dict) -> Iterator[int]:
         return mappings.get(x)
 
     for part in ranges:
-        part = part.strip()
+        part = part.strip()  # noqa: PLW2901
         if "-" in part:
             start, end = part.split("-")
             start = to_number(start)
             end = to_number(end)
+
             if start is None or end is None:
-                print(f"Invalid range: {part}")
-                exit(1)
+                err = f"Invalid range: {part}"
+                raise ValueError(err)
+
             for i in range(start, end + 1):
                 yield i
         else:
             yield to_number(part)
 
 
-def get_library() -> list[str]:
-    library = []
-    page = 1
+def get_library_mappings(library: list[dict]) -> dict:
+    mappings = {}
+    for i, item in enumerate(library):
+        print(f"{i + 1}. ({item.get('content_id')}) {item.get('title')}")
+        mappings[item.get("content_id")] = i + 1
+    return mappings
 
-    while True:
-        library_data = request(
-            "Digital_Api_v2_Mylibrary.getList",
-            {
-                "vr_view_flag": 1,
-                "marking": "0",
-                "limit": 20,
-                "page": page,
-                "sort": "DESC",
-            },
-        )
-        library.extend(list(map(lambda x: x.get("contents"), library_data.get("list"))))
-        if len(library) >= library_data.get("content_total"):
-            break
-        page += 1
 
-    return library
+def request_with_token(
+    path: str, data: dict, *, timeout: int = 60
+) -> requests.Response:
+    return requests.post(
+        f"{BASE_AUTH}{path}",
+        auth=(CLIENT_ID, CLIENT_SECRET),
+        data=data,
+        headers={
+            "User-Agent": USER_AGENT,
+        },
+        timeout=timeout,
+    )
+
+
+def auth_with_login(
+    email: str, password: str, *, timeout: int = 60
+) -> tuple[UserDataModel, AccessTokenDataModel]:
+    response = request_with_token(
+        "/connect/v1/token",
+        data={
+            "grant_type": "password",
+            "email": email,
+            "password": password,
+        },
+        timeout=timeout,
+    )
+
+    response.raise_for_status()
+
+    token_data = response.json()
+
+    if not isinstance(token_data, dict):
+        err = f"Unexpected response format: {token_data}"
+        raise TypeError(err)
+
+    validated_token_data = AccessTokenDataModel(**token_data)
+
+    user_data_str = validated_token_data.body.id_token.split(".")[1]
+    user_data: dict = json.loads(
+        base64.b64decode(user_data_str + "=" * (4 - len(user_data_str) % 4))
+    )
+    return UserDataModel(**user_data), validated_token_data
 
 
 def request(
-    endpoint: str, data: dict | None = None, profile: Literal["video"] = "video"
-) -> requests.Response:
-    if data is None:
-        data = {}
+    endpoint: str,
+    *,
+    request_data: dict,
+    exploit_id: str,
+    authorization: str,
+    timeout: int = 60,
+) -> dict:
+    profile = PROFILES["video"]
 
-    data["device"] = PROFILES[profile]["device"]
-    data["HTTP_SMARTPHONE_APP"] = "DMM-APP"
-    data["HTTP_USER_AGENT"] = USER_AGENT
-    data["exploit_id"] = exploit_id
+    request_data["device"] = profile["device"]
+    request_data["HTTP_SMARTPHONE_APP"] = "DMM-APP"
+    request_data["HTTP_USER_AGENT"] = USER_AGENT
+    request_data["exploit_id"] = exploit_id
 
-    if "type" in PROFILES[profile]:
-        data["vr_appli_type"] = PROFILES[profile]["type"]
+    if "type" in profile:
+        request_data["vr_appli_type"] = profile["type"]
 
-    body = json.dumps(data)
+    body = json.dumps(request_data)
     signature = hmac.new(
-        profiles[profile]["key"].encode(), body.encode(), hashlib.sha256
+        profile["key"].encode(), body.encode(), hashlib.sha256
     ).hexdigest()
 
     response = requests.post(
         f"{BASE_API}/service/digitalapi/-/json/=/method=PcApp/",
         headers={
             "User-Agent": USER_AGENT,
-            "Authorization": f"Bearer {access_token}",
+            "Authorization": authorization,
         },
         data={
             "authkey": signature,
-            "appid": profiles[profile]["appid"],
+            "appid": profile["appid"],
             "message": endpoint,
             "params": body,
         },
-        timeout=REQUEST_TIMEOUT,
+        timeout=timeout,
     )
 
-    data = response.json()
+    response_json = response.json()
+    if not isinstance(response_json, dict):
+        err = f"Unexpected response format: {response_json}"
+        raise TypeError(err)
 
-    if "faultCode" in data:
-        msg = f"""Request failed with faultCode {data.get("faultCode")}
-            faultString: {data.get("faultString")}
-            Endpoint: {endpoint}
-            Data: {data}
-            response.text
-            """
-        logger.error(msg)
-        raise Exception("Request failed")
+    if "faultCode" in response_json:
+        err = f"Request failed with faultCode {response_json.get('faultCode')}"
+        raise RequestError(err)
 
-    return data.get("data")
+    out = response_json["data"]
+    if not isinstance(out, dict):
+        err = f"Unexpected data format: {out}"
+        raise TypeError(err)
+
+    return out
+
+
+def hash_signature(signature: list[str]) -> str:
+    return hmac.new(
+        SECRET_KEY.encode(), "".join(signature).encode(), hashlib.sha256
+    ).hexdigest()
