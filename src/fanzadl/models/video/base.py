@@ -17,7 +17,7 @@ from pydantic import (
     model_validator,
 )
 
-from fanzadl.constants import BASE_VR, USER_AGENT
+from fanzadl.constants import BASE_VR, REQUESTS_TIMEOUT, USER_AGENT
 from fanzadl.exceptions import RequestError
 from fanzadl.functions import request
 from fanzadl.models.response import VideoResponseModel
@@ -103,7 +103,7 @@ class _BaseQualityModel(_AuthAwareModel, _LibraryPropertiesAwareModel, ABC):
     @abstractmethod
     def build_signature(self, *, part: int) -> str: ...
 
-    def request_part(self, part: int, *, timeout: int = 60) -> VideoResponseModel:
+    def request_part(self, part: int) -> VideoResponseModel:
         signature = self.build_signature(part=part)
 
         response = requests.get(
@@ -121,7 +121,7 @@ class _BaseQualityModel(_AuthAwareModel, _LibraryPropertiesAwareModel, ABC):
                 "x-exploit-id": self.exploit_id,
                 "x-user-agent": USER_AGENT,
             },
-            timeout=timeout,
+            timeout=REQUESTS_TIMEOUT,
         )
 
         response.raise_for_status()
@@ -138,10 +138,9 @@ class _BaseQualityModel(_AuthAwareModel, _LibraryPropertiesAwareModel, ABC):
 
         return out
 
-    def get_url(self, part: int, *, timeout: int = 60) -> str:
+    def get_url(self, part: int) -> str:
         response = self.request_part(
             part=part,
-            timeout=timeout,
         )
         content_info = response.content_info
         cookie_info = response.cookie_info
@@ -307,7 +306,7 @@ class _BaseLibraryItemContentsModel(_AuthAwareModel):
                 "product_id": self.product_id,
                 "shop_name": self.shop_name,
             },
-            timeout=60,
+            timeout=REQUESTS_TIMEOUT,
         )
 
     @computed_field
