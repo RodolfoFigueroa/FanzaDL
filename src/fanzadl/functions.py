@@ -143,13 +143,15 @@ def request(
         timeout=timeout,
     )
 
+    response.raise_for_status()
+
     response_json = response.json()
     if not isinstance(response_json, dict):
         err = f"Unexpected response format: {response_json}"
         raise TypeError(err)
 
-    if "faultCode" in response_json:
-        err = f"Request failed with faultCode {response_json.get('faultCode')}"
+    if not response_json["event"]:
+        err = f"API error: {response_json.get('error', 'Unknown error')} | Message: {response_json.get('message', 'No message')}"
         raise RequestError(err)
 
     out = response_json["data"]
