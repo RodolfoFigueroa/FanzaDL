@@ -1,6 +1,9 @@
 class RequestError(Exception):
-    """Base class for exceptions in this module."""
+    """Raised when a request returns an error."""
 
 
 class AuthExpiredError(Exception):
-    """Raised when the authentication token has expired."""
+    """Raised when the authentication has expired."""
+
+    def __init__(self, message: str = "Authentication has expired") -> None:
+        super().__init__(message)

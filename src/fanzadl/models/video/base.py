@@ -301,6 +301,7 @@ class _BaseLibraryItemContentsModel(_AuthAwareModel):
     trans_type: Literal["download", "stream"]
     video_list: _BaseRatePatternModel | None = None
 
+    @computed_field
     @cached_property
     def details(self) -> dict:
         return request(

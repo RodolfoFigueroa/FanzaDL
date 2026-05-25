@@ -18,10 +18,18 @@ logger = logging.getLogger(__name__)
 
 
 class FanzaDLManager:
-    def __init__(self, email: str, password: str, *, request_timeout: int = 60) -> None:
+    def __init__(
+        self,
+        email: str,
+        password: str,
+        *,
+        request_timeout: int = 60,
+        automatic_token_rotation: bool = True,
+    ) -> None:
         self.email = email
         self.password = password
         self.request_timeout = request_timeout
+        self.automatic_token_rotation = automatic_token_rotation
 
         user_data, token_data = auth_with_login(
             email, password, timeout=self.request_timeout
@@ -57,8 +65,7 @@ class FanzaDLManager:
         try:
             access_token_response.raise_for_status()
         except requests.HTTPError as e:
-            err = "Refresh token expired"
-            raise AuthExpiredError(err) from e
+            raise AuthExpiredError from e
 
         access_token_data = access_token_response.json()
 
@@ -70,11 +77,46 @@ class FanzaDLManager:
         self.access_token = token_data.body.access_token
         self.refresh_token = token_data.body.refresh_token
 
+    def _request_with_auto_rotation(
+        self,
+        endpoint: str,
+        *,
+        request_data: dict,
+        exploit_id: str,
+        authorization: str,
+        timeout: int = 60,
+    ) -> dict:
+        try:
+            return request(
+                endpoint=endpoint,
+                request_data=request_data,
+                exploit_id=exploit_id,
+                authorization=authorization,
+                timeout=timeout,
+            )
+        except AuthExpiredError:
+            if self.automatic_token_rotation:
+                logger.info("Access token expired, rotating tokens...")
+                self.rotate_tokens()
+                return request(
+                    endpoint=endpoint,
+                    request_data=request_data,
+                    exploit_id=exploit_id,
+                    authorization=self.authorization,
+                    timeout=timeout,
+                )
+            raise
+
+    # TODO: This depends on the assumption that the auth token is valid for the entire
+    # duration of the library update, since each item needs it to build its
+    # `details` property. If token expiration becomes an issue, consider implementing
+    # a more robust token management strategy, such as checking token validity
+    # before each request and rotating if necessary.
     def update_library(self) -> None:
         page = 1
 
         while True:
-            library_data = request(
+            library_data = self._request_with_auto_rotation(
                 endpoint="Digital_Api_v2_Mylibrary.getList",
                 request_data={
                     "vr_view_flag": 1,

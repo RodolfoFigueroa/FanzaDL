@@ -16,7 +16,7 @@ from fanzadl.constants import (
     SECRET_KEY,
     USER_AGENT,
 )
-from fanzadl.exceptions import RequestError
+from fanzadl.exceptions import AuthExpiredError, RequestError
 from fanzadl.models.access import AccessTokenDataModel
 from fanzadl.models.user import UserDataModel
 
@@ -151,7 +151,11 @@ def request(
         raise TypeError(err)
 
     if not response_json["event"]:
-        err = f"API error: {response_json.get('error', 'Unknown error')} | Message: {response_json.get('message', 'No message')}"
+        error_code = response_json.get("error", "Unknown error")
+        if error_code == "E210013":
+            raise AuthExpiredError
+
+        err = f"API error: {error_code} | Message: {response_json.get('message', 'No message')}"
         raise RequestError(err)
 
     out = response_json["data"]
