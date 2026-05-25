@@ -211,6 +211,16 @@ class _BaseDeliveryInfoModel(
             return None
         return self.stream[-1]
 
+    @computed_field
+    @property
+    def highest(self) -> QualityT | None:
+        candidates = [
+            q for q in (self.download_highest, self.stream_highest) if q is not None
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda x: x.quality_order)
+
 
 class _BaseRatePatternModel(
     _AuthAwareModel, _LibraryPropertiesAwareModel, Generic[QualityT]
@@ -253,6 +263,16 @@ class _BaseRatePatternModel(
         if len(dl_list) == 0:
             return None
         return max(dl_list, key=lambda x: x.quality_order)
+
+    @computed_field
+    @property
+    def highest(self) -> QualityT | None:
+        candidates = [
+            q for q in (self.download_highest, self.stream_highest) if q is not None
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda x: x.quality_order)
 
 
 class _BaseLibraryItemContentsModel(_AuthAwareModel, Generic[QualityT]):
@@ -335,3 +355,13 @@ class _BaseLibraryItemContentsModel(_AuthAwareModel, Generic[QualityT]):
             err = "Video list is not available to determine highest stream quality."
             raise ValueError(err)
         return self.video_list.stream_highest
+
+    @computed_field
+    @property
+    def highest(self) -> QualityT | None:
+        candidates = [
+            q for q in (self.download_highest, self.stream_highest) if q is not None
+        ]
+        if not candidates:
+            return None
+        return max(candidates, key=lambda x: x.quality_order)
