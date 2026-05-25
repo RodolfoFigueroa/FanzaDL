@@ -1,3 +1,5 @@
+from typing import Generic, TypeVar
+
 from fanzadl.models.strict import StrictBaseModel
 
 
@@ -13,11 +15,17 @@ class AccessTokenBodyModel(RefreshTokenBodyModel):
     id_token: str
 
 
-class AccessTokenDataModel(StrictBaseModel):
-    body: AccessTokenBodyModel
+BodyT = TypeVar("BodyT", bound=RefreshTokenBodyModel, default=RefreshTokenBodyModel)
+
+
+class _BaseTokenDataModel(StrictBaseModel, Generic[BodyT]):
+    body: BodyT
     header: dict
 
 
-class RefreshTokenDataModel(StrictBaseModel):
-    body: RefreshTokenBodyModel
-    header: dict
+class AccessTokenDataModel(_BaseTokenDataModel[AccessTokenBodyModel]):
+    pass
+
+
+class RefreshTokenDataModel(_BaseTokenDataModel[RefreshTokenBodyModel]):
+    pass
