@@ -1,8 +1,9 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import (
     ConfigDict,
     Field,
+    field_validator,
 )
 
 from fanzadl.constants import USER_AGENT
@@ -44,18 +45,29 @@ class VideoQualityModel(_BaseQualityModel):
 
 
 class VideoDeliveryInfoModel(_BaseDeliveryInfoModel[VideoQualityModel]):
-    pass
+    @field_validator("download", "stream", mode="before")
+    @classmethod
+    def filter_uncastable_quality(cls, v: Any) -> Any:  # noqa: ANN401
+        if not isinstance(v, list):
+            return v
+        return [
+            item
+            for item in v
+            if not isinstance(item, dict)
+            or not isinstance(item.get("quality"), str)
+            or item["quality"].lstrip("-").isdigit()
+        ]
 
 
 class VideoRatePatternModel(_BaseRatePatternModel[VideoQualityModel]):
+    model_config = ConfigDict(extra="ignore")
+
     amazonfire: VideoDeliveryInfoModel
     amazonfire_4k: VideoDeliveryInfoModel
     amazonfirestick: VideoDeliveryInfoModel
     android: VideoDeliveryInfoModel
     androidtv: VideoDeliveryInfoModel
     appletv: VideoDeliveryInfoModel
-    aquos: VideoDeliveryInfoModel
-    bravia: VideoDeliveryInfoModel
     chromecast: VideoDeliveryInfoModel
     chromecast_4k: VideoDeliveryInfoModel
     chromecast_hd: VideoDeliveryInfoModel
@@ -66,8 +78,6 @@ class VideoRatePatternModel(_BaseRatePatternModel[VideoQualityModel]):
     ps4: VideoDeliveryInfoModel
     ps4_pro: VideoDeliveryInfoModel
     ps5: VideoDeliveryInfoModel
-    regza: VideoDeliveryInfoModel
-    viera: VideoDeliveryInfoModel
     vita_tv: VideoDeliveryInfoModel = Field(alias="vita-tv")
     vita: VideoDeliveryInfoModel
 
