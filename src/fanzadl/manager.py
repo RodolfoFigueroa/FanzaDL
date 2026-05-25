@@ -4,7 +4,7 @@ import requests
 
 from fanzadl.exceptions import AuthExpiredError
 from fanzadl.functions import auth_with_login, request, request_with_token
-from fanzadl.models.access import AccessTokenDataModel
+from fanzadl.models.access import RefreshTokenDataModel
 from fanzadl.models.library import (
     LibraryDataModel,
 )
@@ -73,7 +73,7 @@ class FanzaDLManager:
             err = f"Unexpected response format: {access_token_data}"
             raise TypeError(err)
 
-        token_data = AccessTokenDataModel(**access_token_data)
+        token_data = RefreshTokenDataModel(**access_token_data)
         self.access_token = token_data.body.access_token
         self.refresh_token = token_data.body.refresh_token
 
