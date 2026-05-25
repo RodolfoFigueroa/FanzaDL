@@ -26,8 +26,6 @@ class FanzaDLManager:
         request_timeout: int = 60,
         automatic_token_rotation: bool = True,
     ) -> None:
-        self.email = email
-        self.password = password
         self.request_timeout = request_timeout
         self.automatic_token_rotation = automatic_token_rotation
 
