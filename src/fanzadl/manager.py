@@ -115,6 +115,9 @@ class FanzaDLManager:
     def update_library(self) -> None:
         page = 1
 
+        new_library: dict[
+            int, VideoLibraryItemContentsModel | VRLibraryItemContentsModel
+        ] = {}
         while True:
             library_data = self._request_with_auto_rotation(
                 endpoint="Digital_Api_v2_Mylibrary.getList",
@@ -175,8 +178,9 @@ class FanzaDLManager:
                     err = f"Unknown content type: {elem.contents['content_type']}"
                     raise ValueError(err)
 
-                self.library[int(elem.contents["mylibrary_id"])] = model
+                new_library[int(elem.contents["mylibrary_id"])] = model
 
-            if len(self.library) >= library_parsed.content_total:
+            if len(new_library) >= library_parsed.content_total:
                 break
             page += 1
+        self.library = new_library
