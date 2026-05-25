@@ -70,7 +70,7 @@ def auth_with_login(
         err = f"Unexpected response format: {token_data}"
         raise TypeError(err)
 
-    if token_data["header"]["result_code"] == 1:
+    if int(token_data["header"]["result_code"]) == 1:
         error_code = token_data["body"]["code"]
         if error_code == "E110000":
             raise MalformedEmailError
