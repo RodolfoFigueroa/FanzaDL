@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from datetime import date, datetime
 from functools import cached_property
-from typing import Literal
+from typing import Generic, Literal, Self, TypeVar
 
 import requests
 from pydantic import (
@@ -34,7 +34,7 @@ class _AuthAwareModel(StrictBaseModel):
     _get_exploit_id: Callable[[], str] = PrivateAttr()
 
     @model_validator(mode="after")
-    def inject_callable(self, info: ValidationInfo) -> "_AuthAwareModel":
+    def inject_callable(self, info: ValidationInfo) -> Self:
         if info.context:
             if "authorization" in info.context:
                 self._get_authorization = info.context["authorization"]
@@ -57,9 +57,7 @@ class _LibraryPropertiesAwareModel(StrictBaseModel):
     _shop_name: str = PrivateAttr(default="")
 
     @model_validator(mode="after")
-    def get_library_properties(
-        self, info: ValidationInfo
-    ) -> "_LibraryPropertiesAwareModel":
+    def get_library_properties(self, info: ValidationInfo) -> Self:
         if info.context:
             if "mylibrary_id" in info.context:
                 self._mylibrary_id = info.context["mylibrary_id"]
@@ -80,7 +78,7 @@ class _ProductIDAwareModel(StrictBaseModel):
     _product_id: str = PrivateAttr(default="")
 
     @model_validator(mode="after")
-    def get_product_id(self, info: ValidationInfo) -> "_ProductIDAwareModel":
+    def get_product_id(self, info: ValidationInfo) -> Self:
         if info.context and "product_id" in info.context:
             self._product_id = info.context["product_id"]
         return self
@@ -153,30 +151,36 @@ class _BaseQualityModel(_AuthAwareModel, _LibraryPropertiesAwareModel, ABC):
         return [self.get_url(part=i) for i in range(1, self.parts + 1)]
 
 
-class _BaseDeliveryInfoModel(_AuthAwareModel, _LibraryPropertiesAwareModel):
-    download: list[_BaseQualityModel] = []  # noqa: RUF012
-    stream: list[_BaseQualityModel] = []  # noqa: RUF012
+QualityT = TypeVar("QualityT", bound=_BaseQualityModel, default=_BaseQualityModel)
+
+
+class _BaseDeliveryInfoModel(
+    _AuthAwareModel, _LibraryPropertiesAwareModel, Generic[QualityT]
+):
+    download: list[QualityT] = []  # noqa: RUF012
+    stream: list[QualityT] = []  # noqa: RUF012
 
     @field_validator("download", "stream")
     @classmethod
-    def enforce_sorted_quality(
-        cls, v: list[_BaseQualityModel] | None
-    ) -> list[_BaseQualityModel] | None:
+    def enforce_sorted_quality(cls, v: list[QualityT] | None) -> list[QualityT] | None:
         if v is None:
             return v
-        return sorted(v, key=lambda x: x.quality_order, reverse=False)
+        return sorted(v, key=lambda x: x.quality_order)
 
     @model_validator(mode="after")
-    def enforce_part_count(self) -> "_BaseDeliveryInfoModel":
+    def enforce_at_least_one_quality(self) -> Self:
+        if len(self.download) == 0 and len(self.stream) == 0:
+            err = "At least one of download or stream must have quality information"
+            raise ValueError(err)
+        return self
+
+    @model_validator(mode="after")
+    def enforce_part_count(self) -> Self:
         part_counts = {
             quality.parts
             for delivery_method in (self.download, self.stream)
             for quality in delivery_method
         }
-
-        if len(part_counts) == 0:
-            err = "No quality information available to determine part count"
-            raise ValueError(err)
 
         if len(part_counts) > 1:
             err = f"Inconsistent part counts: {part_counts}"
@@ -184,64 +188,35 @@ class _BaseDeliveryInfoModel(_AuthAwareModel, _LibraryPropertiesAwareModel):
 
         return self
 
-    @model_validator(mode="after")
-    def enforce_at_least_one_quality(self) -> "_BaseDeliveryInfoModel":
-        if len(self.download) == 0 and len(self.stream) == 0:
-            err = "At least one of download or stream must have quality information"
-            raise ValueError(err)
-        return self
-
     @computed_field
     @property
     def parts(self) -> int:
-        part_count: int | None = None
         for delivery_method in (self.download, self.stream):
             if len(delivery_method) > 0:
-                part_count = delivery_method[0].parts
-                break
-
-        if part_count is None:
-            err = "No quality information available to determine part count."
-            raise ValueError(err)
-
-        return part_count
+                return delivery_method[0].parts
+        msg = "No quality information available to determine part count."
+        raise AssertionError(msg)
 
     @computed_field
     @property
-    def download_highest(self) -> _BaseQualityModel | None:
+    def download_highest(self) -> QualityT | None:
         if len(self.download) == 0:
             return None
         return self.download[-1]
 
     @computed_field
     @property
-    def stream_highest(self) -> _BaseQualityModel | None:
+    def stream_highest(self) -> QualityT | None:
         if len(self.stream) == 0:
             return None
         return self.stream[-1]
 
 
-def create_highest_quality_property(subfield_name: str) -> property:
-    @computed_field
-    @property
-    def _getter(self: "_BaseRatePatternModel") -> _BaseQualityModel | None:
-        dl_list: list[_BaseQualityModel] = []
-        for _, model in self:
-            attr = getattr(model, subfield_name)
-            if attr is not None:
-                dl_list.append(attr)
-
-        if len(dl_list) == 0:
-            return None
-
-        return max(dl_list, key=lambda x: x.quality_order)
-
-    return _getter
-
-
-class _BaseRatePatternModel(_AuthAwareModel, _LibraryPropertiesAwareModel):
+class _BaseRatePatternModel(
+    _AuthAwareModel, _LibraryPropertiesAwareModel, Generic[QualityT]
+):
     @model_validator(mode="after")
-    def enforce_equal_part_count(self) -> "_BaseRatePatternModel":
+    def enforce_equal_part_count(self) -> Self:
         part_counts = {delivery_info.parts for _, delivery_info in self}
         if len(part_counts) > 1:
             err = f"Inconsistent part counts across delivery methods: {part_counts}"
@@ -255,11 +230,32 @@ class _BaseRatePatternModel(_AuthAwareModel, _LibraryPropertiesAwareModel):
         _, delivery = next(iter(self))
         return delivery.parts
 
-    download_highest = create_highest_quality_property("download_highest")
-    stream_highest = create_highest_quality_property("stream_highest")
+    @computed_field
+    @property
+    def download_highest(self) -> QualityT | None:
+        dl_list: list[QualityT] = []
+        for _, model in self:
+            attr = model.download_highest
+            if attr is not None:
+                dl_list.append(attr)
+        if len(dl_list) == 0:
+            return None
+        return max(dl_list, key=lambda x: x.quality_order)
+
+    @computed_field
+    @property
+    def stream_highest(self) -> QualityT | None:
+        dl_list: list[QualityT] = []
+        for _, model in self:
+            attr = model.stream_highest
+            if attr is not None:
+                dl_list.append(attr)
+        if len(dl_list) == 0:
+            return None
+        return max(dl_list, key=lambda x: x.quality_order)
 
 
-class _BaseLibraryItemContentsModel(_AuthAwareModel):
+class _BaseLibraryItemContentsModel(_AuthAwareModel, Generic[QualityT]):
     allow_foreign: int
     android_dl_flag: int
     approx_release_date: date | None
@@ -299,7 +295,7 @@ class _BaseLibraryItemContentsModel(_AuthAwareModel):
     stream_expire: int
     title: str
     trans_type: Literal["download", "stream"]
-    video_list: _BaseRatePatternModel | None = None
+    video_list: _BaseRatePatternModel[QualityT] | None = None
 
     @computed_field
     @cached_property
@@ -326,7 +322,7 @@ class _BaseLibraryItemContentsModel(_AuthAwareModel):
 
     @computed_field
     @property
-    def download_highest(self) -> _BaseQualityModel | None:
+    def download_highest(self) -> QualityT | None:
         if self.video_list is None:
             err = "Video list is not available to determine highest download quality."
             raise ValueError(err)
@@ -334,7 +330,7 @@ class _BaseLibraryItemContentsModel(_AuthAwareModel):
 
     @computed_field
     @property
-    def stream_highest(self) -> _BaseQualityModel | None:
+    def stream_highest(self) -> QualityT | None:
         if self.video_list is None:
             err = "Video list is not available to determine highest stream quality."
             raise ValueError(err)

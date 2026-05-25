@@ -43,12 +43,11 @@ class VideoQualityModel(_BaseQualityModel):
         )
 
 
-class VideoDeliveryInfoModel(_BaseDeliveryInfoModel):
-    download: list[VideoQualityModel] = []  # noqa: RUF012
-    stream: list[VideoQualityModel] = []  # noqa: RUF012
+class VideoDeliveryInfoModel(_BaseDeliveryInfoModel[VideoQualityModel]):
+    pass
 
 
-class VideoRatePatternModel(_BaseRatePatternModel):
+class VideoRatePatternModel(_BaseRatePatternModel[VideoQualityModel]):
     amazonfire: VideoDeliveryInfoModel
     amazonfire_4k: VideoDeliveryInfoModel
     amazonfirestick: VideoDeliveryInfoModel
@@ -73,6 +72,6 @@ class VideoRatePatternModel(_BaseRatePatternModel):
     vita: VideoDeliveryInfoModel
 
 
-class VideoLibraryItemContentsModel(_BaseLibraryItemContentsModel):
+class VideoLibraryItemContentsModel(_BaseLibraryItemContentsModel[VideoQualityModel]):
     content_type: Literal["video"]
     video_list: VideoRatePatternModel

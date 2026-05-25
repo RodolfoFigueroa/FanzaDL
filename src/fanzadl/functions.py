@@ -3,7 +3,6 @@ import hashlib
 import hmac
 import json
 import logging
-from collections.abc import Iterator
 
 import requests
 
@@ -21,36 +20,6 @@ from fanzadl.models.access import AccessTokenDataModel
 from fanzadl.models.user import UserDataModel
 
 logger = logging.getLogger(__name__)
-
-
-def parse_ranges(ranges_str: str, mappings: dict) -> Iterator[int]:
-    if ranges_str == "*":
-        for i in range(len(mappings)):
-            yield i + 1
-        return
-
-    ranges = ranges_str.split(",")
-
-    def to_number(x: str):
-        if x.isnumeric():
-            return int(x)
-        return mappings.get(x)
-
-    for part in ranges:
-        part = part.strip()  # noqa: PLW2901
-        if "-" in part:
-            start, end = part.split("-")
-            start = to_number(start)
-            end = to_number(end)
-
-            if start is None or end is None:
-                err = f"Invalid range: {part}"
-                raise ValueError(err)
-
-            for i in range(start, end + 1):
-                yield i
-        else:
-            yield to_number(part)
 
 
 def get_library_mappings(library: list[dict]) -> dict:

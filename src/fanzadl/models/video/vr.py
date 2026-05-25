@@ -33,12 +33,11 @@ class VRQualityModel(_BaseQualityModel, _ProductIDAwareModel):
         )
 
 
-class VRDeliveryInfoModel(_BaseDeliveryInfoModel, _ProductIDAwareModel):
-    download: list[VRQualityModel] = []  # noqa: RUF012
-    stream: list[VRQualityModel] = []  # noqa: RUF012
+class VRDeliveryInfoModel(_BaseDeliveryInfoModel[VRQualityModel], _ProductIDAwareModel):
+    pass
 
 
-class VRRatePatternModel(_BaseRatePatternModel, _ProductIDAwareModel):
+class VRRatePatternModel(_BaseRatePatternModel[VRQualityModel], _ProductIDAwareModel):
     android_vr: VRDeliveryInfoModel
     iphone_vr: VRDeliveryInfoModel
     oculusgear_vr: VRDeliveryInfoModel
@@ -56,6 +55,8 @@ class VRRatePatternModel(_BaseRatePatternModel, _ProductIDAwareModel):
     xperia_vr: VRDeliveryInfoModel
 
 
-class VRLibraryItemContentsModel(_BaseLibraryItemContentsModel, _ProductIDAwareModel):
+class VRLibraryItemContentsModel(
+    _BaseLibraryItemContentsModel[VRQualityModel], _ProductIDAwareModel
+):
     content_type: Literal["vr"]
     video_list: VRRatePatternModel = Field(alias="vr_rate_pattern")
