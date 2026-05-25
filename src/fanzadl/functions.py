@@ -15,7 +15,12 @@ from fanzadl.constants import (
     SECRET_KEY,
     USER_AGENT,
 )
-from fanzadl.exceptions import AuthExpiredError, RequestError
+from fanzadl.exceptions import (
+    AuthExpiredError,
+    MalformedEmailError,
+    RequestError,
+    WrongCredentialsError,
+)
 from fanzadl.models.access import AccessTokenDataModel
 from fanzadl.models.user import UserDataModel
 
@@ -64,6 +69,16 @@ def auth_with_login(
     if not isinstance(token_data, dict):
         err = f"Unexpected response format: {token_data}"
         raise TypeError(err)
+
+    if token_data["header"]["result_code"] == 1:
+        error_code = token_data["body"]["code"]
+        if error_code == "E110000":
+            raise MalformedEmailError
+        if error_code == "E210001":
+            raise WrongCredentialsError
+
+        err = f"Authentication error: {error_code} | Message: {token_data['body'].get('message', 'No message')}"
+        raise RequestError(err)
 
     validated_token_data = AccessTokenDataModel(**token_data)
 
