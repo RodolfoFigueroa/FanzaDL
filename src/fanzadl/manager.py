@@ -157,7 +157,6 @@ class FanzaDLManager:
                     **base_context,
                     "mylibrary_id": elem.contents["mylibrary_id"],
                     "shop_name": elem.contents["shop_name"],
-                    "product_id": elem.contents["product_id"],
                 }
 
                 if elem.contents["content_type"] == "video":
