@@ -18,7 +18,7 @@ from pydantic import (
 )
 
 from fanzadl.constants import BASE_VR, REQUESTS_TIMEOUT, USER_AGENT
-from fanzadl.exceptions import RequestError
+from fanzadl.exceptions import AuthExpiredError, RequestError
 from fanzadl.functions import request
 from fanzadl.models.response import VideoResponseModel
 from fanzadl.models.strict import StrictBaseModel
@@ -32,6 +32,8 @@ class RatePatternModel(StrictBaseModel):
 class _AuthAwareModel(StrictBaseModel):
     _get_authorization: Callable[[], str] = PrivateAttr()
     _get_exploit_id: Callable[[], str] = PrivateAttr()
+    _rotate_tokens: Callable[[], None] | None = PrivateAttr(default=None)
+    _max_rotation_retries: int = PrivateAttr(default=0)
 
     @model_validator(mode="after")
     def inject_callable(self, info: ValidationInfo) -> Self:
@@ -40,6 +42,10 @@ class _AuthAwareModel(StrictBaseModel):
                 self._get_authorization = info.context["authorization"]
             if "exploit_id" in info.context:
                 self._get_exploit_id = info.context["exploit_id"]
+            if "rotate_tokens" in info.context:
+                self._rotate_tokens = info.context["rotate_tokens"]
+            if "max_rotation_retries" in info.context:
+                self._max_rotation_retries = info.context["max_rotation_retries"]
 
         return self
 
@@ -74,20 +80,6 @@ class _LibraryPropertiesAwareModel(StrictBaseModel):
         return self._shop_name
 
 
-class _ProductIDAwareModel(StrictBaseModel):
-    _product_id: str = PrivateAttr(default="")
-
-    @model_validator(mode="after")
-    def get_product_id(self, info: ValidationInfo) -> Self:
-        if info.context and "product_id" in info.context:
-            self._product_id = info.context["product_id"]
-        return self
-
-    @property
-    def product_id(self) -> str:
-        return self._product_id
-
-
 class _BaseQualityModel(_AuthAwareModel, _LibraryPropertiesAwareModel, ABC):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -101,7 +93,7 @@ class _BaseQualityModel(_AuthAwareModel, _LibraryPropertiesAwareModel, ABC):
     @abstractmethod
     def build_signature(self, *, part: int) -> str: ...
 
-    def request_part(self, part: int) -> VideoResponseModel:
+    def _do_request_part(self, part: int) -> VideoResponseModel:
         signature = self.build_signature(part=part)
 
         response = requests.get(
@@ -129,12 +121,32 @@ class _BaseQualityModel(_AuthAwareModel, _LibraryPropertiesAwareModel, ABC):
             err = "Unexpected response format"
             raise TypeError(err)
 
+        status_code = js["status"]["code"]
+        if status_code != 0:
+            if status_code == 401:
+                raise AuthExpiredError
+            err = f"Error in response: {js}"
+            raise RequestError(err)
+
         out = VideoResponseModel(**js)
         if out.status.code != 0:
             err = f"Error in response: {out.status}"
             raise RequestError(err)
 
         return out
+
+    def request_part(self, part: int) -> VideoResponseModel:
+        try:
+            return self._do_request_part(part)
+        except AuthExpiredError:
+            if self._rotate_tokens is not None:
+                for _attempt in range(self._max_rotation_retries):
+                    self._rotate_tokens()
+                    try:
+                        return self._do_request_part(part)
+                    except AuthExpiredError:
+                        pass
+            raise
 
     def get_url(self, part: int) -> str:
         response = self.request_part(
@@ -191,11 +203,8 @@ class _BaseDeliveryInfoModel(
     @computed_field
     @property
     def parts(self) -> int:
-        for delivery_method in (self.download, self.stream):
-            if len(delivery_method) > 0:
-                return delivery_method[0].parts
-        msg = "No quality information available to determine part count."
-        raise AssertionError(msg)
+        delivery = next(m for m in (self.download, self.stream) if m)
+        return delivery[0].parts
 
     @computed_field
     @property

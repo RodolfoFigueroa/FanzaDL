@@ -24,10 +24,14 @@ class FanzaDLManager:
         password: str,
         *,
         request_timeout: int = 60,
-        automatic_token_rotation: bool = True,
+        automatic_token_rotation: int | None = 1,
     ) -> None:
         self.request_timeout = request_timeout
-        self.automatic_token_rotation = automatic_token_rotation
+        _rotation = 0 if automatic_token_rotation is None else automatic_token_rotation
+        if _rotation < 0:
+            err = "automatic_token_rotation must be a non-negative integer or None"
+            raise ValueError(err)
+        self.automatic_token_rotation: int = _rotation
 
         user_data, token_data = auth_with_login(
             email, password, timeout=self.request_timeout
@@ -93,16 +97,23 @@ class FanzaDLManager:
                 timeout=timeout,
             )
         except AuthExpiredError:
-            if self.automatic_token_rotation:
-                logger.info("Access token expired, rotating tokens...")
-                self.rotate_tokens()
-                return request(
-                    endpoint=endpoint,
-                    request_data=request_data,
-                    exploit_id=exploit_id,
-                    authorization=self.authorization,
-                    timeout=timeout,
+            for attempt in range(self.automatic_token_rotation):
+                logger.info(
+                    "Access token expired, rotating tokens (attempt %d/%d)...",
+                    attempt + 1,
+                    self.automatic_token_rotation,
                 )
+                self.rotate_tokens()
+                try:
+                    return request(
+                        endpoint=endpoint,
+                        request_data=request_data,
+                        exploit_id=exploit_id,
+                        authorization=self.authorization,
+                        timeout=timeout,
+                    )
+                except AuthExpiredError:
+                    pass
             raise
 
     # TODO: This depends on the assumption that the auth token is valid for the entire
@@ -136,6 +147,8 @@ class FanzaDLManager:
             base_context = {
                 "authorization": lambda: self.authorization,
                 "exploit_id": lambda: self.exploit_id,
+                "rotate_tokens": self.rotate_tokens,
+                "max_rotation_retries": self.automatic_token_rotation,
                 "mylibrary_id": None,
                 "shop_name": None,
             }

@@ -27,14 +27,6 @@ from fanzadl.models.user import UserDataModel
 logger = logging.getLogger(__name__)
 
 
-def get_library_mappings(library: list[dict]) -> dict:
-    mappings = {}
-    for i, item in enumerate(library):
-        print(f"{i + 1}. ({item.get('content_id')}) {item.get('title')}")
-        mappings[item.get("content_id")] = i + 1
-    return mappings
-
-
 def request_with_token(
     path: str, data: dict, *, timeout: int = 60
 ) -> requests.Response:

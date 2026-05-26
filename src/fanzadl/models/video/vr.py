@@ -9,14 +9,12 @@ from fanzadl.models.video.base import (
     _BaseLibraryItemContentsModel,
     _BaseQualityModel,
     _BaseRatePatternModel,
-    _ProductIDAwareModel,
 )
 
 
-class VRQualityModel(_BaseQualityModel, _ProductIDAwareModel):
+class VRQualityModel(_BaseQualityModel):
     quality: int | Literal["hq", "uhq"]
     quality_short_display_name: str
-    parts: int = Field(alias="part")
     file_size: int | None = None
     url_suffix: Literal["vr"] = "vr"
 
@@ -33,11 +31,11 @@ class VRQualityModel(_BaseQualityModel, _ProductIDAwareModel):
         )
 
 
-class VRDeliveryInfoModel(_BaseDeliveryInfoModel[VRQualityModel], _ProductIDAwareModel):
+class VRDeliveryInfoModel(_BaseDeliveryInfoModel[VRQualityModel]):
     pass
 
 
-class VRRatePatternModel(_BaseRatePatternModel[VRQualityModel], _ProductIDAwareModel):
+class VRRatePatternModel(_BaseRatePatternModel[VRQualityModel]):
     android_vr: VRDeliveryInfoModel
     iphone_vr: VRDeliveryInfoModel
     oculusgear_vr: VRDeliveryInfoModel
@@ -55,8 +53,6 @@ class VRRatePatternModel(_BaseRatePatternModel[VRQualityModel], _ProductIDAwareM
     xperia_vr: VRDeliveryInfoModel
 
 
-class VRLibraryItemContentsModel(
-    _BaseLibraryItemContentsModel[VRQualityModel], _ProductIDAwareModel
-):
+class VRLibraryItemContentsModel(_BaseLibraryItemContentsModel[VRQualityModel]):
     content_type: Literal["vr"]
     video_list: VRRatePatternModel = Field(alias="vr_rate_pattern")
