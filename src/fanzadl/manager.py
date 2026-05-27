@@ -3,16 +3,20 @@ import logging
 import requests
 
 from fanzadl.exceptions import AuthExpiredError
-from fanzadl.functions import auth_with_login, request, request_with_token
+from fanzadl.functions import (
+    auth_with_login,
+    query_javstash_from_product_id,
+    request,
+    request_with_token,
+)
 from fanzadl.models.access import RefreshTokenDataModel
 from fanzadl.models.library import (
     LibraryDataModel,
 )
 from fanzadl.models.video import (
-    VideoLibraryItemContentsModel,
-    VRLibraryItemContentsModel,
+    LibraryItemContentsModel,
+    library_item_adapter,
 )
-from fanzadl.models.video.base import _BaseLibraryItemContentsModel
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +29,17 @@ class FanzaDLManager:
         *,
         request_timeout: int = 60,
         automatic_token_rotation: int | None = 1,
+        javstash_api_key: str | None = None,
     ) -> None:
         self.request_timeout = request_timeout
+
         _rotation = 0 if automatic_token_rotation is None else automatic_token_rotation
         if _rotation < 0:
             err = "automatic_token_rotation must be a non-negative integer or None"
             raise ValueError(err)
         self.automatic_token_rotation: int = _rotation
+
+        self.javstash_api_key = javstash_api_key
 
         user_data, token_data = auth_with_login(
             email, password, timeout=self.request_timeout
@@ -41,9 +49,7 @@ class FanzaDLManager:
         self.refresh_token = token_data.body.refresh_token
         self.access_token = token_data.body.access_token
 
-        self.library: dict[
-            int, VideoLibraryItemContentsModel | VRLibraryItemContentsModel
-        ] = {}
+        self.library: dict[int, LibraryItemContentsModel] = {}
         self.update_library()
 
     @property
@@ -116,17 +122,10 @@ class FanzaDLManager:
                     pass
             raise
 
-    # TODO: This depends on the assumption that the auth token is valid for the entire
-    # duration of the library update, since each item needs it to build its
-    # `details` property. If token expiration becomes an issue, consider implementing
-    # a more robust token management strategy, such as checking token validity
-    # before each request and rotating if necessary.
     def update_library(self) -> None:
         page = 1
 
-        new_library: dict[
-            int, VideoLibraryItemContentsModel | VRLibraryItemContentsModel
-        ] = {}
+        new_library: dict[int, LibraryItemContentsModel] = {}
         while True:
             library_data = self._request_with_auto_rotation(
                 endpoint="Digital_Api_v2_Mylibrary.getList",
@@ -159,34 +158,20 @@ class FanzaDLManager:
                     "shop_name": elem.contents["shop_name"],
                 }
 
-                if elem.contents["content_type"] == "video":
-                    # Create a temporary _BaseLibraryItemContentsModel to
-                    # extract the details field
-                    _temp_contents = elem.contents.copy()
-                    del _temp_contents["content_type"]
-                    _base_model = _BaseLibraryItemContentsModel.model_validate(
-                        _temp_contents,
-                        context=context,
-                    )
+                model = library_item_adapter.validate_python(
+                    elem.contents,
+                    context=context,
+                )
 
-                    # Inject the delivery_content_info into the contents for
-                    # the final model validation
-                    elem.contents["video_list"] = _base_model.details[
-                        "delivery_content_info"
-                    ]
-
-                    model = VideoLibraryItemContentsModel.model_validate(
-                        elem.contents,
-                        context=context,
+                if self.javstash_api_key is not None:
+                    js_response = query_javstash_from_product_id(
+                        model.content_id,
+                        api_key=self.javstash_api_key,
                     )
-                elif elem.contents["content_type"] == "vr":
-                    model = VRLibraryItemContentsModel.model_validate(
-                        elem.contents,
-                        context=context,
-                    )
-                else:
-                    err = f"Unknown content type: {elem.contents['content_type']}"
-                    raise ValueError(err)
+                    scenes = js_response.data.query_scenes
+                    if scenes.count == 1:
+                        model.javstash_id = scenes.scenes[0].id
+                        model.javstash_studio_code = scenes.scenes[0].code
 
                 new_library[int(elem.contents["mylibrary_id"])] = model
 

@@ -4,6 +4,7 @@ from collections.abc import Callable
 from datetime import date, datetime
 from functools import cached_property
 from typing import Generic, Literal, Self, TypeVar
+from uuid import UUID
 
 import requests
 from pydantic import (
@@ -325,6 +326,9 @@ class _BaseLibraryItemContentsModel(_AuthAwareModel, Generic[QualityT]):
     title: str
     trans_type: Literal["download", "stream"]
     video_list: _BaseRatePatternModel[QualityT] | None = None
+
+    javstash_id: UUID | None = None
+    javstash_studio_code: str | None = None
 
     @computed_field
     @cached_property

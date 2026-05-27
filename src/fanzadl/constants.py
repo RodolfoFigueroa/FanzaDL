@@ -25,3 +25,5 @@ PROFILES = {
         "type": "oculusquest2",
     },
 }
+
+JAVSTASH_GRAPHQL_ENDPOINT = "https://javstash.org/graphql"

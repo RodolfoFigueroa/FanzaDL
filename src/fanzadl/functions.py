@@ -11,7 +11,9 @@ from fanzadl.constants import (
     BASE_AUTH,
     CLIENT_ID,
     CLIENT_SECRET,
+    JAVSTASH_GRAPHQL_ENDPOINT,
     PROFILES,
+    REQUESTS_TIMEOUT,
     SECRET_KEY,
     USER_AGENT,
 )
@@ -22,6 +24,7 @@ from fanzadl.exceptions import (
     WrongCredentialsError,
 )
 from fanzadl.models.access import AccessTokenDataModel
+from fanzadl.models.javstash import JAVStashResponseModel
 from fanzadl.models.user import UserDataModel
 
 logger = logging.getLogger(__name__)
@@ -146,3 +149,46 @@ def hash_signature(signature: list[str]) -> str:
     return hmac.new(
         SECRET_KEY.encode(), "".join(signature).encode(), hashlib.sha256
     ).hexdigest()
+
+
+def query_javstash_from_product_id(
+    product_id: str, *, api_key: str
+) -> JAVStashResponseModel:
+    headers = {
+        "Content-Type": "application/json",
+        "ApiKey": api_key,
+    }
+
+    query = """
+    query test($scene_input: SceneQueryInput!) {
+    queryScenes(input: $scene_input) {
+        count
+        scenes {
+        id
+        code
+        }
+    }
+    }
+    """
+    variables = {
+        "scene_input": {
+            "url": f"https://r18.dev/videos/vod/movies/detail/-/id={product_id}/"
+        }
+    }
+    payload = {"query": query, "variables": variables}
+
+    response = requests.post(
+        JAVSTASH_GRAPHQL_ENDPOINT,
+        json=payload,
+        headers=headers,
+        timeout=REQUESTS_TIMEOUT,
+    )
+    response.raise_for_status()
+
+    j = response.json()
+
+    if not isinstance(j, dict):
+        err = f"Unexpected response format: {j}"
+        raise TypeError(err)
+
+    return JAVStashResponseModel(**j)

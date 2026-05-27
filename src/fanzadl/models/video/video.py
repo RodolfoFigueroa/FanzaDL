@@ -3,7 +3,9 @@ from typing import Any, Literal
 from pydantic import (
     ConfigDict,
     Field,
+    ValidationInfo,
     field_validator,
+    model_validator,
 )
 
 from fanzadl.constants import USER_AGENT
@@ -85,3 +87,14 @@ class VideoRatePatternModel(_BaseRatePatternModel[VideoQualityModel]):
 class VideoLibraryItemContentsModel(_BaseLibraryItemContentsModel[VideoQualityModel]):
     content_type: Literal["video"]
     video_list: VideoRatePatternModel
+
+    @model_validator(mode="before")
+    @classmethod
+    def fetch_video_list_if_missing(cls, data: Any, info: ValidationInfo) -> Any:  # noqa: ANN401
+        if isinstance(data, dict) and "video_list" not in data:
+            temp = {k: v for k, v in data.items() if k != "content_type"}
+            base = _BaseLibraryItemContentsModel.model_validate(
+                temp, context=info.context
+            )
+            data = {**data, "video_list": base.details["delivery_content_info"]}
+        return data
