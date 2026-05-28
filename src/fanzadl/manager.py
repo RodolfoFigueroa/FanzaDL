@@ -31,6 +31,10 @@ class FanzaDLManager:
         javstash_api_key: str | None = None,
         auto_populate_library: bool = True,
     ) -> None:
+        self.user_id: str
+        self.refresh_token: str
+        self.access_token: str
+
         self._process_auth_input(
             email=email,
             password=password,
@@ -80,6 +84,8 @@ class FanzaDLManager:
             self.refresh_token = token_data.body.refresh_token
             self.access_token = token_data.body.access_token
         else:
+            assert user_id is not None  # noqa: S101
+            assert refresh_token is not None  # noqa: S101
             self.user_id = user_id
             self.refresh_token = refresh_token
             self.rotate_tokens()
