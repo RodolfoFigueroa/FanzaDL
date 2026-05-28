@@ -1,11 +1,11 @@
-from typing import Self
+from typing import Literal, Self
 
 from fanzadl.models.video.base import (
     _SkeletonLibraryItemContentsModel,
 )
 
 
-class UnavailableLibraryItemContentsModel(_SkeletonLibraryItemContentsModel):
+class _BaseUnavailableLibraryItemContentsModel(_SkeletonLibraryItemContentsModel):
     @classmethod
     def from_contents_model(cls, model: _SkeletonLibraryItemContentsModel) -> Self:
         field_data = {k: v for k, v in model.__dict__.items() if k in cls.model_fields}
@@ -21,3 +21,11 @@ class UnavailableLibraryItemContentsModel(_SkeletonLibraryItemContentsModel):
         # ruff: enable[SLF001]
 
         return instance
+
+
+class UnavailableVideoItemContentsModel(_BaseUnavailableLibraryItemContentsModel):
+    content_type: Literal["video"]
+
+
+class UnavailableVRItemContentsModel(_BaseUnavailableLibraryItemContentsModel):
+    content_type: Literal["vr"]

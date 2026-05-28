@@ -16,6 +16,10 @@ from fanzadl.models.video import (
     UnavailableLibraryItemContentsModel,
     library_item_adapter,
 )
+from fanzadl.models.video.unavailable import (
+    UnavailableVideoItemContentsModel,
+    UnavailableVRItemContentsModel,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -226,10 +230,21 @@ class FanzaDLManager:
         if self.track_expired_items:
             expired_ids = set(self.library.keys()) - set(new_library.keys())
             for expired_id in expired_ids:
-                self.expired_library[expired_id] = (
-                    UnavailableLibraryItemContentsModel.from_contents_model(
-                        self.library[expired_id]
+                elem = self.library[expired_id]
+                if elem.content_type == "video":
+                    self.expired_library[expired_id] = (
+                        UnavailableVideoItemContentsModel.from_contents_model(
+                            self.library[expired_id]
+                        )
                     )
-                )
+                elif elem.content_type == "vr":
+                    self.expired_library[expired_id] = (
+                        UnavailableVRItemContentsModel.from_contents_model(
+                            self.library[expired_id]
+                        )
+                    )
+                else:
+                    err = f"Unknown content type for expired item {expired_id}: {elem.content_type}"
+                    logger.warning(err)
 
         self.library = new_library
