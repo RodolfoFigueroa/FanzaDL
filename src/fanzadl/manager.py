@@ -24,13 +24,24 @@ logger = logging.getLogger(__name__)
 class FanzaDLManager:
     def __init__(
         self,
-        email: str,
-        password: str,
         *,
+        email: str | None = None,
+        password: str | None = None,
+        user_id: str | None = None,
+        refresh_token: str | None = None,
+        access_token: str | None = None,
         request_timeout: int = 60,
         automatic_token_rotation: int | None = 1,
         javstash_api_key: str | None = None,
     ) -> None:
+        self._process_auth_input(
+            email=email,
+            password=password,
+            user_id=user_id,
+            refresh_token=refresh_token,
+            access_token=access_token,
+        )
+
         self.request_timeout = request_timeout
 
         _rotation = 0 if automatic_token_rotation is None else automatic_token_rotation
@@ -41,16 +52,42 @@ class FanzaDLManager:
 
         self.javstash_api_key = javstash_api_key
 
-        user_data, token_data = auth_with_login(
-            email, password, timeout=self.request_timeout
-        )
-
-        self.user_id = user_data.user_id
-        self.refresh_token = token_data.body.refresh_token
-        self.access_token = token_data.body.access_token
-
         self.library: dict[int, LibraryItemContentsModel] = {}
         self.update_library()
+
+    def _process_auth_input(
+        self,
+        email: str | None,
+        password: str | None,
+        user_id: str | None,
+        refresh_token: str | None,
+        access_token: str | None,
+    ) -> None:
+        has_credentials = all(v is not None for v in (email, password))
+        has_tokens = all(v is not None for v in (user_id, refresh_token, access_token))
+
+        if has_credentials and has_tokens:
+            err = "Provide either email/password or user_id/refresh_token/access_token, not both"
+            raise ValueError(err)
+
+        if not has_credentials and not has_tokens:
+            err = "Must provide either email/password or user_id/refresh_token/access_token"
+            raise ValueError(err)
+
+        if has_credentials:
+            # Using assert here to satisfy type checkers
+            assert email is not None  # noqa: S101
+            assert password is not None  # noqa: S101
+            user_data, token_data = auth_with_login(
+                email, password, timeout=self.request_timeout
+            )
+            self.user_id = user_data.user_id
+            self.refresh_token = token_data.body.refresh_token
+            self.access_token = token_data.body.access_token
+        else:
+            self.user_id = user_id
+            self.refresh_token = refresh_token
+            self.access_token = access_token
 
     @property
     def exploit_id(self) -> str:
