@@ -2,6 +2,7 @@ from typing import Annotated
 
 from pydantic import Field, TypeAdapter
 
+from fanzadl.models.video.unavailable import UnavailableLibraryItemContentsModel
 from fanzadl.models.video.video import VideoLibraryItemContentsModel
 from fanzadl.models.video.vr import VRLibraryItemContentsModel
 
@@ -14,6 +15,7 @@ library_item_adapter = TypeAdapter(LibraryItemContentsModel)
 
 __all__ = [
     "LibraryItemContentsModel",
+    "UnavailableLibraryItemContentsModel",
     "VRLibraryItemContentsModel",
     "VideoLibraryItemContentsModel",
     "library_item_adapter",

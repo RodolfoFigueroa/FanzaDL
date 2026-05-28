@@ -13,6 +13,7 @@ from fanzadl.models.library import (
 )
 from fanzadl.models.video import (
     LibraryItemContentsModel,
+    UnavailableLibraryItemContentsModel,
     library_item_adapter,
 )
 
@@ -30,6 +31,7 @@ class FanzaDLManager:
         automatic_token_rotation: int | bool | None = True,
         javstash_api_key: str | None = None,
         auto_populate_library: bool = True,
+        track_expired_items: bool = False,
     ) -> None:
         self.user_id: str
         self.refresh_token: str
@@ -42,6 +44,9 @@ class FanzaDLManager:
             refresh_token=refresh_token,
         )
 
+        self.track_expired_items = track_expired_items
+        self.javstash_api_key = javstash_api_key
+
         _rotation = (
             0 if automatic_token_rotation is None else int(automatic_token_rotation)
         )
@@ -50,9 +55,8 @@ class FanzaDLManager:
             raise ValueError(err)
         self.automatic_token_rotation: int = _rotation
 
-        self.javstash_api_key = javstash_api_key
-
         self.library: dict[int, LibraryItemContentsModel] = {}
+        self.expired_library: dict[int, UnavailableLibraryItemContentsModel] = {}
 
         if auto_populate_library:
             self.update_library()
@@ -218,5 +222,14 @@ class FanzaDLManager:
                 )
 
                 new_library[int(elem.contents["mylibrary_id"])] = model
+
+        if self.track_expired_items:
+            expired_ids = set(self.library.keys()) - set(new_library.keys())
+            for expired_id in expired_ids:
+                self.expired_library[expired_id] = (
+                    UnavailableLibraryItemContentsModel.from_contents_model(
+                        self.library[expired_id]
+                    )
+                )
 
         self.library = new_library

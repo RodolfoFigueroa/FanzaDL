@@ -286,7 +286,7 @@ class _BaseRatePatternModel(
         return max(candidates, key=lambda x: x.quality_order)
 
 
-class _BaseLibraryItemContentsModel(_AuthAwareModel, Generic[QualityT]):
+class _SkeletonLibraryItemContentsModel(_AuthAwareModel):
     _javstash_api_key: SecretStr | None = PrivateAttr(default=None)
 
     allow_foreign: int
@@ -328,7 +328,6 @@ class _BaseLibraryItemContentsModel(_AuthAwareModel, Generic[QualityT]):
     stream_expire: int
     title: str
     trans_type: Literal["download", "stream"]
-    video_list: _BaseRatePatternModel[QualityT] | None = None
 
     @model_validator(mode="after")
     def inject_javstash_api_key(self, info: ValidationInfo) -> Self:
@@ -337,20 +336,6 @@ class _BaseLibraryItemContentsModel(_AuthAwareModel, Generic[QualityT]):
             if key is not None:
                 self._javstash_api_key = SecretStr(key)
         return self
-
-    @computed_field
-    @cached_property
-    def details(self) -> dict:
-        return request(
-            endpoint="Digital_Api_Mylibrary.getDetail",
-            authorization=self.authorization,
-            exploit_id=self.exploit_id,
-            request_data={
-                "mylibrary_id": self.mylibrary_id,
-                "product_id": self.product_id,
-                "shop_name": self.shop_name,
-            },
-        )
 
     @cached_property
     def _javstash_info(self) -> dict | None:
@@ -386,6 +371,26 @@ class _BaseLibraryItemContentsModel(_AuthAwareModel, Generic[QualityT]):
             self._javstash_info["javstash_studio_code"]
             if self._javstash_info is not None
             else None
+        )
+
+
+class _BaseLibraryItemContentsModel(
+    _SkeletonLibraryItemContentsModel, Generic[QualityT]
+):
+    video_list: _BaseRatePatternModel[QualityT] | None = None
+
+    @computed_field
+    @cached_property
+    def details(self) -> dict:
+        return request(
+            endpoint="Digital_Api_Mylibrary.getDetail",
+            authorization=self.authorization,
+            exploit_id=self.exploit_id,
+            request_data={
+                "mylibrary_id": self.mylibrary_id,
+                "product_id": self.product_id,
+                "shop_name": self.shop_name,
+            },
         )
 
     @computed_field

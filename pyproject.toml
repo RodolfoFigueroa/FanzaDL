@@ -1,6 +1,6 @@
 [project]
 name = "fanzadl"
-version = "0.1.12"
+version = "0.1.13"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
@@ -13,9 +13,20 @@ package = true
 [project.scripts]
 fanzadl = "fanzadl.main:main"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = ["D", "PLR2004", "COM812", "PLR0913"]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
 [dependency-groups]
-dev = ["ipykernel<7"]
+dev = [
+    "ipykernel<7",
+    "polyfactory>=3.3.0",
+    "pytest>=9.0.3",
+    "pytest-mock>=3.15.1",
+]
