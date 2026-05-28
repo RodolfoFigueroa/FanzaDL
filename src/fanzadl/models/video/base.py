@@ -12,6 +12,7 @@ from pydantic import (
     Field,
     HttpUrl,
     PrivateAttr,
+    SecretStr,
     ValidationInfo,
     computed_field,
     field_validator,
@@ -20,7 +21,7 @@ from pydantic import (
 
 from fanzadl.constants import BASE_VR, REQUESTS_TIMEOUT, USER_AGENT
 from fanzadl.exceptions import AuthExpiredError, RequestError
-from fanzadl.functions import request
+from fanzadl.functions import query_javstash_from_product_id, request
 from fanzadl.models.response import VideoResponseModel
 from fanzadl.models.strict import StrictBaseModel
 
@@ -39,12 +40,12 @@ class _AuthAwareModel(StrictBaseModel):
     @model_validator(mode="after")
     def inject_callable(self, info: ValidationInfo) -> Self:
         if info.context:
-            if "authorization" in info.context:
-                self._get_authorization = info.context["authorization"]
-            if "exploit_id" in info.context:
-                self._get_exploit_id = info.context["exploit_id"]
-            if "rotate_tokens" in info.context:
-                self._rotate_tokens = info.context["rotate_tokens"]
+            if "authorization_callback" in info.context:
+                self._get_authorization = info.context["authorization_callback"]
+            if "exploit_id_callback" in info.context:
+                self._get_exploit_id = info.context["exploit_id_callback"]
+            if "rotate_tokens_callback" in info.context:
+                self._rotate_tokens = info.context["rotate_tokens_callback"]
             if "max_rotation_retries" in info.context:
                 self._max_rotation_retries = info.context["max_rotation_retries"]
 
@@ -286,6 +287,8 @@ class _BaseRatePatternModel(
 
 
 class _BaseLibraryItemContentsModel(_AuthAwareModel, Generic[QualityT]):
+    _javstash_api_key: SecretStr | None = PrivateAttr(default=None)
+
     allow_foreign: int
     android_dl_flag: int
     approx_release_date: date | None
@@ -327,8 +330,13 @@ class _BaseLibraryItemContentsModel(_AuthAwareModel, Generic[QualityT]):
     trans_type: Literal["download", "stream"]
     video_list: _BaseRatePatternModel[QualityT] | None = None
 
-    javstash_id: UUID | None = None
-    javstash_studio_code: str | None = None
+    @model_validator(mode="after")
+    def inject_javstash_api_key(self, info: ValidationInfo) -> Self:
+        if info.context and "javstash_api_key" in info.context:
+            key = info.context["javstash_api_key"]
+            if key is not None:
+                self._javstash_api_key = SecretStr(key)
+        return self
 
     @computed_field
     @cached_property
@@ -342,6 +350,42 @@ class _BaseLibraryItemContentsModel(_AuthAwareModel, Generic[QualityT]):
                 "product_id": self.product_id,
                 "shop_name": self.shop_name,
             },
+        )
+
+    @cached_property
+    def _javstash_info(self) -> dict | None:
+        if self._javstash_api_key is None:
+            return None
+        js_response = query_javstash_from_product_id(
+            self.content_id,
+            api_key=self._javstash_api_key.get_secret_value(),
+        )
+        scenes = js_response.data.query_scenes
+        if scenes.count != 1:
+            err = f"Expected exactly one scene from JavStash for product_id {self.product_id}, got {scenes.count}"
+            raise ValueError(err)
+
+        return {
+            "javstash_id": scenes.scenes[0].id,
+            "javstash_studio_code": scenes.scenes[0].code,
+        }
+
+    @computed_field
+    @property
+    def javstash_id(self) -> UUID | None:
+        return (
+            self._javstash_info["javstash_id"]
+            if self._javstash_info is not None
+            else None
+        )
+
+    @computed_field
+    @property
+    def javstash_studio_code(self) -> str | None:
+        return (
+            self._javstash_info["javstash_studio_code"]
+            if self._javstash_info is not None
+            else None
         )
 
     @computed_field

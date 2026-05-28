@@ -4,7 +4,6 @@ from collections.abc import Generator
 from fanzadl.exceptions import AuthExpiredError
 from fanzadl.functions import (
     auth_with_login,
-    query_javstash_from_product_id,
     request,
     request_with_token,
 )
@@ -58,8 +57,9 @@ class FanzaDLManager:
         if auto_populate_library:
             self.update_library()
             for item in self.library.values():
-                # Access the attribute to populate lazily evaluated properties
+                # Access attributes to populate lazily evaluated properties
                 _ = item.details
+                _ = item._javstash_info  # noqa: SLF001
 
     def _process_auth_input(
         self,
@@ -196,12 +196,13 @@ class FanzaDLManager:
     def update_library(self) -> None:
         new_library: dict[int, LibraryItemContentsModel] = {}
         base_context = {
-            "authorization": lambda: self.authorization,
-            "exploit_id": lambda: self.exploit_id,
-            "rotate_tokens": self.rotate_tokens,
+            "authorization_callback": lambda: self.authorization,
+            "exploit_id_callback": lambda: self.exploit_id,
+            "rotate_tokens_callback": self.rotate_tokens,
             "max_rotation_retries": self.automatic_token_rotation,
             "mylibrary_id": None,
             "shop_name": None,
+            "javstash_api_key": self.javstash_api_key,
         }
         for library_page in self._user_library_generator():
             for elem in library_page.list_:
@@ -215,16 +216,6 @@ class FanzaDLManager:
                     elem.contents,
                     context=context,
                 )
-
-                if self.javstash_api_key is not None:
-                    js_response = query_javstash_from_product_id(
-                        model.content_id,
-                        api_key=self.javstash_api_key,
-                    )
-                    scenes = js_response.data.query_scenes
-                    if scenes.count == 1:
-                        model.javstash_id = scenes.scenes[0].id
-                        model.javstash_studio_code = scenes.scenes[0].code
 
                 new_library[int(elem.contents["mylibrary_id"])] = model
 
