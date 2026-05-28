@@ -342,7 +342,6 @@ class _BaseLibraryItemContentsModel(_AuthAwareModel, Generic[QualityT]):
                 "product_id": self.product_id,
                 "shop_name": self.shop_name,
             },
-            timeout=REQUESTS_TIMEOUT,
         )
 
     @computed_field

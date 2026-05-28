@@ -30,9 +30,7 @@ from fanzadl.models.user import UserDataModel
 logger = logging.getLogger(__name__)
 
 
-def request_with_token(
-    path: str, data: dict, *, timeout: int = 60
-) -> requests.Response:
+def request_with_token(path: str, data: dict) -> requests.Response:
     return requests.post(
         f"{BASE_AUTH}{path}",
         auth=(CLIENT_ID, CLIENT_SECRET),
@@ -40,12 +38,12 @@ def request_with_token(
         headers={
             "User-Agent": USER_AGENT,
         },
-        timeout=timeout,
+        timeout=REQUESTS_TIMEOUT,
     )
 
 
 def auth_with_login(
-    email: str, password: str, *, timeout: int = 60
+    email: str, password: str
 ) -> tuple[UserDataModel, AccessTokenDataModel]:
     response = request_with_token(
         "/connect/v1/token",
@@ -54,7 +52,6 @@ def auth_with_login(
             "email": email,
             "password": password,
         },
-        timeout=timeout,
     )
 
     response.raise_for_status()
@@ -90,7 +87,6 @@ def request(
     request_data: dict,
     exploit_id: str,
     authorization: str,
-    timeout: int = 60,
 ) -> dict:
     profile = PROFILES["video"]
 
@@ -119,7 +115,7 @@ def request(
             "message": endpoint,
             "params": body,
         },
-        timeout=timeout,
+        timeout=REQUESTS_TIMEOUT,
     )
 
     response.raise_for_status()

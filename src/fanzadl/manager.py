@@ -1,7 +1,5 @@
 import logging
 
-import requests
-
 from fanzadl.exceptions import AuthExpiredError
 from fanzadl.functions import (
     auth_with_login,
@@ -29,22 +27,20 @@ class FanzaDLManager:
         password: str | None = None,
         user_id: str | None = None,
         refresh_token: str | None = None,
-        access_token: str | None = None,
-        request_timeout: int = 60,
-        automatic_token_rotation: int | None = 1,
+        automatic_token_rotation: int | bool | None = True,
         javstash_api_key: str | None = None,
+        auto_populate_library: bool = True,
     ) -> None:
         self._process_auth_input(
             email=email,
             password=password,
             user_id=user_id,
             refresh_token=refresh_token,
-            access_token=access_token,
         )
 
-        self.request_timeout = request_timeout
-
-        _rotation = 0 if automatic_token_rotation is None else automatic_token_rotation
+        _rotation = (
+            0 if automatic_token_rotation is None else int(automatic_token_rotation)
+        )
         if _rotation < 0:
             err = "automatic_token_rotation must be a non-negative integer or None"
             raise ValueError(err)
@@ -53,7 +49,9 @@ class FanzaDLManager:
         self.javstash_api_key = javstash_api_key
 
         self.library: dict[int, LibraryItemContentsModel] = {}
-        self.update_library()
+
+        if auto_populate_library:
+            self.update_library()
 
     def _process_auth_input(
         self,
@@ -61,33 +59,30 @@ class FanzaDLManager:
         password: str | None,
         user_id: str | None,
         refresh_token: str | None,
-        access_token: str | None,
     ) -> None:
         has_credentials = all(v is not None for v in (email, password))
-        has_tokens = all(v is not None for v in (user_id, refresh_token, access_token))
+        has_tokens = all(v is not None for v in (user_id, refresh_token))
 
         if has_credentials and has_tokens:
-            err = "Provide either email/password or user_id/refresh_token/access_token, not both"
+            err = "Provide either email/password or user_id/refresh_token, not both"
             raise ValueError(err)
 
         if not has_credentials and not has_tokens:
-            err = "Must provide either email/password or user_id/refresh_token/access_token"
+            err = "Must provide either email/password or user_id/refresh_token"
             raise ValueError(err)
 
         if has_credentials:
             # Using assert here to satisfy type checkers
             assert email is not None  # noqa: S101
             assert password is not None  # noqa: S101
-            user_data, token_data = auth_with_login(
-                email, password, timeout=self.request_timeout
-            )
+            user_data, token_data = auth_with_login(email, password)
             self.user_id = user_data.user_id
             self.refresh_token = token_data.body.refresh_token
             self.access_token = token_data.body.access_token
         else:
             self.user_id = user_id
             self.refresh_token = refresh_token
-            self.access_token = access_token
+            self.rotate_tokens()
 
     @property
     def exploit_id(self) -> str:
@@ -104,21 +99,26 @@ class FanzaDLManager:
                 "grant_type": "refresh_token",
                 "refresh_token": self.refresh_token,
             },
-            timeout=self.request_timeout,
         )
 
-        try:
-            access_token_response.raise_for_status()
-        except requests.HTTPError as e:
-            raise AuthExpiredError from e
+        access_token_response.raise_for_status()
 
         access_token_data = access_token_response.json()
+
+        msg = f"Token rotation response: {access_token_data}"
+        logger.debug(msg)
 
         if not isinstance(access_token_data, dict):
             err = f"Unexpected response format: {access_token_data}"
             raise TypeError(err)
 
+        code = int(access_token_data["header"]["result_code"])
+        if code != 0:
+            err = f"Token rotation failed with code {code}: {access_token_data['body']}"
+            raise AuthExpiredError(err)
+
         token_data = RefreshTokenDataModel(**access_token_data)
+
         self.access_token = token_data.body.access_token
         self.refresh_token = token_data.body.refresh_token
 
@@ -129,7 +129,6 @@ class FanzaDLManager:
         request_data: dict,
         exploit_id: str,
         authorization: str,
-        timeout: int = 60,
     ) -> dict:
         try:
             return request(
@@ -137,7 +136,6 @@ class FanzaDLManager:
                 request_data=request_data,
                 exploit_id=exploit_id,
                 authorization=authorization,
-                timeout=timeout,
             )
         except AuthExpiredError:
             for attempt in range(self.automatic_token_rotation):
@@ -153,7 +151,6 @@ class FanzaDLManager:
                         request_data=request_data,
                         exploit_id=exploit_id,
                         authorization=self.authorization,
-                        timeout=timeout,
                     )
                 except AuthExpiredError:
                     pass
@@ -175,7 +172,6 @@ class FanzaDLManager:
                 },
                 exploit_id=self.exploit_id,
                 authorization=self.authorization,
-                timeout=self.request_timeout,
             )
 
             library_parsed = LibraryDataModel(**library_data)
