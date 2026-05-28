@@ -230,18 +230,10 @@ class FanzaDLManager:
                 elem = self.library[expired_id]
                 if elem.content_type == "video":
                     self.expired_library[expired_id] = (
-                        UnavailableVideoItemContentsModel.from_contents_model(
-                            self.library[expired_id]
-                        )
+                        UnavailableVideoItemContentsModel.from_contents_model(elem)
                     )
                 elif elem.content_type == "vr":
                     self.expired_library[expired_id] = (
-                        UnavailableVRItemContentsModel.from_contents_model(
-                            self.library[expired_id]
-                        )
+                        UnavailableVRItemContentsModel.from_contents_model(elem)
                     )
-                else:
-                    err = f"Unknown content type for expired item {expired_id}: {elem.content_type}"
-                    logger.warning(err)
-
         self.library = new_library
