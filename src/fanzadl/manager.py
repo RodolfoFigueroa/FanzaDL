@@ -123,9 +123,6 @@ class FanzaDLManager:
 
         access_token_data = access_token_response.json()
 
-        msg = f"Token rotation response: {access_token_data}"
-        logger.debug(msg)
-
         if not isinstance(access_token_data, dict):
             err = f"Unexpected response format: {access_token_data}"
             raise TypeError(err)
