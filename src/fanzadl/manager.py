@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Generator
 
 from fanzadl.exceptions import AuthExpiredError
 from fanzadl.functions import (
@@ -56,6 +57,9 @@ class FanzaDLManager:
 
         if auto_populate_library:
             self.update_library()
+            for item in self.library.values():
+                # Access the attribute to populate lazily evaluated properties
+                _ = item.details
 
     def _process_auth_input(
         self,
@@ -162,35 +166,45 @@ class FanzaDLManager:
                     pass
             raise
 
-    def update_library(self) -> None:
-        page = 1
+    def _get_user_library_page(self, page: int) -> LibraryDataModel:
+        library_data = self._request_with_auto_rotation(
+            endpoint="Digital_Api_v2_Mylibrary.getList",
+            request_data={
+                "vr_view_flag": 1,
+                "marking": "0",
+                "limit": 20,
+                "page": page,
+                "sort": "DESC",
+            },
+            exploit_id=self.exploit_id,
+            authorization=self.authorization,
+        )
 
-        new_library: dict[int, LibraryItemContentsModel] = {}
+        return LibraryDataModel(**library_data)
+
+    def _user_library_generator(self) -> Generator[LibraryDataModel]:
+        page: int = 1
+        seen_items: int = 0
         while True:
-            library_data = self._request_with_auto_rotation(
-                endpoint="Digital_Api_v2_Mylibrary.getList",
-                request_data={
-                    "vr_view_flag": 1,
-                    "marking": "0",
-                    "limit": 20,
-                    "page": page,
-                    "sort": "DESC",
-                },
-                exploit_id=self.exploit_id,
-                authorization=self.authorization,
-            )
+            library_page = self._get_user_library_page(page)
+            seen_items += len(library_page.list_)
+            yield library_page
+            if seen_items >= library_page.content_total:
+                break
+            page += 1
 
-            library_parsed = LibraryDataModel(**library_data)
-
-            base_context = {
-                "authorization": lambda: self.authorization,
-                "exploit_id": lambda: self.exploit_id,
-                "rotate_tokens": self.rotate_tokens,
-                "max_rotation_retries": self.automatic_token_rotation,
-                "mylibrary_id": None,
-                "shop_name": None,
-            }
-            for elem in library_parsed.list_:
+    def update_library(self) -> None:
+        new_library: dict[int, LibraryItemContentsModel] = {}
+        base_context = {
+            "authorization": lambda: self.authorization,
+            "exploit_id": lambda: self.exploit_id,
+            "rotate_tokens": self.rotate_tokens,
+            "max_rotation_retries": self.automatic_token_rotation,
+            "mylibrary_id": None,
+            "shop_name": None,
+        }
+        for library_page in self._user_library_generator():
+            for elem in library_page.list_:
                 context = {
                     **base_context,
                     "mylibrary_id": elem.contents["mylibrary_id"],
@@ -214,7 +228,4 @@ class FanzaDLManager:
 
                 new_library[int(elem.contents["mylibrary_id"])] = model
 
-            if len(new_library) >= library_parsed.content_total:
-                break
-            page += 1
         self.library = new_library
