@@ -236,6 +236,8 @@ class _BaseDeliveryInfoModel(
 class _BaseRatePatternModel(
     _AuthAwareModel, _LibraryPropertiesAwareModel, Generic[QualityT]
 ):
+    model_config = ConfigDict(extra="ignore")
+
     @model_validator(mode="after")
     def enforce_equal_part_count(self) -> Self:
         part_counts = {delivery_info.parts for _, delivery_info in self}

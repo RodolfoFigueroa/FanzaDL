@@ -62,8 +62,6 @@ class VideoDeliveryInfoModel(_BaseDeliveryInfoModel[VideoQualityModel]):
 
 
 class VideoRatePatternModel(_BaseRatePatternModel[VideoQualityModel]):
-    model_config = ConfigDict(extra="ignore")
-
     amazonfire: VideoDeliveryInfoModel
     amazonfire_4k: VideoDeliveryInfoModel
     amazonfirestick: VideoDeliveryInfoModel
