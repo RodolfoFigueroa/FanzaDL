@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from fanzadl.constants import USER_AGENT
 from fanzadl.functions import hash_signature
@@ -54,5 +54,7 @@ class VRRatePatternModel(_BaseRatePatternModel[VRQualityModel]):
 
 
 class VRLibraryItemContentsModel(_BaseLibraryItemContentsModel[VRQualityModel]):
+    model_config = ConfigDict(populate_by_name=True)
+
     content_type: Literal["vr"]
     video_list: VRRatePatternModel = Field(alias="vr_rate_pattern")
