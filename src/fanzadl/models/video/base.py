@@ -171,6 +171,8 @@ QualityT = TypeVar("QualityT", bound=_BaseQualityModel, default=_BaseQualityMode
 class _BaseDeliveryInfoModel(
     _AuthAwareModel, _LibraryPropertiesAwareModel, Generic[QualityT]
 ):
+    model_config = ConfigDict(extra="ignore")
+
     download: list[QualityT] = []  # noqa: RUF012
     stream: list[QualityT] = []  # noqa: RUF012
 
