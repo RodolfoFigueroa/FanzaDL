@@ -351,8 +351,7 @@ class _SkeletonLibraryItemContentsModel(_AuthAwareModel):
         )
         scenes = js_response.data.query_scenes
         if scenes.count != 1:
-            err = f"Expected exactly one scene from JavStash for product_id {self.product_id}, got {scenes.count}"
-            raise ValueError(err)
+            return None
 
         return {
             "javstash_id": scenes.scenes[0].id,
